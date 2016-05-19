@@ -2,13 +2,18 @@ package cems;
 
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.CookieHandler;
 import java.net.CookieManager;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
+import org.json.simple.JSONObject;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -35,19 +40,91 @@ public class RequestCems {
 		String timeOfExam = "http://cems-husc.hueuni.edu.vn/Student/TimeOfExam.aspx";
 		String result = http.getPageContent(moduleList);
 		http.getModuleList(result);
+		//System.out.println(result);
 		
+	}
+	private JSONObject getDetailTableSubject(String id,Document doc) {
+		Element table = doc.getElementById(id);
+		Elements table_row = table.getElementsByTag("tr");
+		//System.out.println(table_row.get(7));
+		Elements table_data = table_row.get(0).getElementsByTag("td");
+		String[] keyStr = new String[table_data.size() - 1];
+		for(int i = 0; i < table_data.size() - 1;i++) {
+			keyStr[i] = table_data.get(i).text();
+		}
+		JSONObject typeOfSubject = new JSONObject();
+		List<JSONObject> optionSubjectObjList = new ArrayList<JSONObject>();
+		List<JSONObject> obligatorySubjectObjList = new ArrayList<JSONObject>();
+		boolean subjectListOption =false;
+		for(int i = 2; i < table_row.size();i++) {
+			
+			table_data = table_row.get(i).getElementsByTag("td");
+			
+			//If this subject is obligatory
+			if(table_data.size()>1 && !subjectListOption) {
+				//System.out.println(table_data.text());
+				JSONObject subjectObj = new JSONObject();
+				for(int eachtd = 0; eachtd < table_data.size() - 1;eachtd++) {
+					if(isNumeric(table_data.get(eachtd).text())) {
+						subjectObj.put(keyStr[eachtd],Integer.parseInt(table_data.get(eachtd).text()));
+					} else {
+						subjectObj.put(keyStr[eachtd], table_data.get(eachtd).text());
+					}
+					
+					//System.out.println(table_data.get(eachtd).text());
+					
+				}
+				obligatorySubjectObjList.add(subjectObj);
+			}
+			else if(table_data.size()>1 && subjectListOption) {
+				//System.out.println(table_data.text());
+				JSONObject subjectObj = new JSONObject();
+				for(int eachtd = 0; eachtd < table_data.size() - 1;eachtd++) {
+					if(isNumeric(table_data.get(eachtd).text())) {
+						subjectObj.put(keyStr[eachtd],Integer.parseInt(table_data.get(eachtd).text()));
+					} else {
+						subjectObj.put(keyStr[eachtd], table_data.get(eachtd).text());
+					}
+					
+					//System.out.println(table_data.get(eachtd).text());
+					
+				}
+				optionSubjectObjList.add(subjectObj);
+			} else if(table_data.size()<2 && !subjectListOption){
+				//System.out.println(table_data.text());
+				//System.out.println("So hoc phan bat buoc "+obligatorySubjectObjList.size());
+				typeOfSubject.put("Các học phần bắt buộc", obligatorySubjectObjList);
+				subjectListOption = true;
+			}
+		}
+		typeOfSubject.put("Các học phần tự chọn", optionSubjectObjList);
+		System.out.println(typeOfSubject);
+		return typeOfSubject;
 	}
 	private void getModuleList(String html) {
 		Document doc = Jsoup.parse(html);
-		Element table = doc.getElementById("ctl00_contentPlaceMain_panelTrongKHDT");
-		Elements table_row = table.getElementsByTag("tr");
-		//System.out.println(table_row.get(7));
-		for(Element row: table_row) {
-			Elements table_data = row.getElementsByTag("td");
-			for(Element data:table_data) {
-				System.out.println(data.text()+"\n");
-			}
-		}
+		//Main program school course
+		JSONObject programOfSchool = new JSONObject();
+		programOfSchool.put("Danh sách học phần trong kế hoạch đào tạo", getDetailTableSubject("ctl00_contentPlaceMain_panelTrongKHDT", doc));
+		programOfSchool.put("Danh sách học phần theo chương trình đào tạo", getDetailTableSubject("ctl00_contentPlaceMain_panelTheoCTDT", doc));
+		System.out.println(programOfSchool);
+		writeToJSon(programOfSchool);
+//		Iterator<JSONObject> subjectIterator = subjectObjList.iterator();
+//		while(subjectIterator.hasNext()) {
+//			System.out.println(subjectIterator.next().toJSONString());
+//		}
+	}
+	public static boolean isNumeric(String str)  
+	{  
+	  try  
+	  {  
+	    double d = Double.parseDouble(str);  
+	  }  
+	  catch(NumberFormatException nfe)  
+	  {  
+	    return false;  
+	  }  
+	  return true;  
 	}
 	private void sendPost(String url,String postParams) throws Exception {
 		URL obj = new URL(url);
@@ -134,6 +211,16 @@ public class RequestCems {
 		setCookies(conn.getHeaderFields().get("Set-Cookie"));
 
 		return response.toString();
+	}
+	private void writeToJSon(JSONObject obj) {
+		try {
+			FileWriter file = new FileWriter("ModuleList.json");
+			file.write(obj.toJSONString());
+			file.flush();
+			file.close();
+		} catch(IOException e) {
+			e.printStackTrace();
+		}
 	}
 	public void setCookies(List<String> cookies) {
 		this.cookies = cookies;
